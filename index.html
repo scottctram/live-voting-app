@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Yes or No Vote</title>
+  <title>Vote Now</title>
   <style>
     body {
       font-family: sans-serif;
@@ -22,10 +22,30 @@
     }
     .yes { background: red; }
     .no { background: blue; }
-    .reset { background: gray; }
     .count {
       font-size: 2rem;
       margin: 20px;
+    }
+    .bar-container {
+      width: 80%;
+      margin: 20px auto;
+      height: 30px;
+      background: #ddd;
+      border-radius: 15px;
+      overflow: hidden;
+      display: flex;
+    }
+    .bar-yes {
+      background: red;
+      height: 100%;
+    }
+    .bar-no {
+      background: blue;
+      height: 100%;
+    }
+    .percent {
+      font-size: 1.2rem;
+      margin-top: 10px;
     }
   </style>
 </head>
@@ -36,13 +56,17 @@
   <div class="count">
     Yes: <span id="yesCount">0</span> | No: <span id="noCount">0</span>
   </div>
-  <button class="reset" onclick="resetVotes()">🔁 Reset Votes</button>
 
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+  <div class="bar-container">
+    <div id="barYes" class="bar-yes" style="width: 50%"></div>
+    <div id="barNo" class="bar-no" style="width: 50%"></div>
+  </div>
+  <div class="percent" id="percentText">YES: 50% | NO: 50%</div>
 
-  <script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getDatabase, ref, get, set, update, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
     const firebaseConfig = {
       apiKey: "AIzaSyD3HTRrUOQONSY-reZxP785uSg2c8Uq54o",
       authDomain: "live-voting-app.firebaseapp.com",
@@ -53,15 +77,14 @@
       appId: "1:368119225307:web:1bfdc5d1f5df116022a5fe"
     };
 
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-    const voteRef = db.ref('votes');
-    const roundRef = db.ref('round');
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const voteRef = ref(db, 'votes');
+    const roundRef = ref(db, 'round');
 
     let currentRound = 1;
 
-    // Load current round
-    roundRef.on('value', snapshot => {
+    onValue(roundRef, snapshot => {
       currentRound = snapshot.val() || 1;
       const lastVotedRound = Number(localStorage.getItem('lastVotedRound') || 0);
       if (lastVotedRound === currentRound) {
@@ -71,11 +94,18 @@
       }
     });
 
-    // Load votes
-    voteRef.on('value', snapshot => {
+    onValue(voteRef, snapshot => {
       const data = snapshot.val() || { yes: 0, no: 0 };
       document.getElementById('yesCount').textContent = data.yes;
       document.getElementById('noCount').textContent = data.no;
+
+      const total = data.yes + data.no;
+      const yesPercent = total ? Math.round((data.yes / total) * 100) : 50;
+      const noPercent = 100 - yesPercent;
+
+      document.getElementById('barYes').style.width = yesPercent + '%';
+      document.getElementById('barNo').style.width = noPercent + '%';
+      document.getElementById('percentText').textContent = `YES: ${yesPercent}% | NO: ${noPercent}%`;
     });
 
     function vote(type) {
@@ -85,19 +115,13 @@
         return;
       }
 
-      voteRef.once('value').then(snapshot => {
+      get(voteRef).then(snapshot => {
         const data = snapshot.val() || { yes: 0, no: 0 };
         data[type]++;
-        voteRef.set(data);
+        update(voteRef, data);
         localStorage.setItem('lastVotedRound', currentRound);
         disableVoting();
       });
-    }
-
-    function resetVotes() {
-      const newRound = currentRound + 1;
-      roundRef.set(newRound);
-      voteRef.set({ yes: 0, no: 0 });
     }
 
     function disableVoting() {
